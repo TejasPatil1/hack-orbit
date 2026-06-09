@@ -28,7 +28,10 @@ from app.schemas.telemetry import (
     ManeuverRequest,
     CopilotRequest,
     IncidentReportRequest,
+    InjectAnomalyRequest,
+    VALID_SCENARIOS,
 )
+from app.state import set_scenario
 
 # ML services — import failures are handled gracefully; stubs remain as fallback
 try:
@@ -48,6 +51,19 @@ try:
     _HAS_SCORER = True
 except Exception:
     _HAS_SCORER = False
+
+try:
+    from app.services.ai_copilot import copilot as _copilot_svc
+    from app.services.ai_copilot.context_builder import build_context as _build_context
+    _HAS_COPILOT_SVC = True
+except Exception:
+    _HAS_COPILOT_SVC = False
+
+try:
+    from app.services.maneuver_planner.engine import recommend as _maneuver_recommend
+    _HAS_MANEUVER_SVC = True
+except Exception:
+    _HAS_MANEUVER_SVC = False
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -313,9 +329,38 @@ def _build_maneuver_actions(
     return posture, actions, summary_map[posture]
 
 
+def _run_maneuver(
+    score: int,
+    failure_prob: int,
+    flagged: list,
+    risk_level: str,
+    maneuver_advised: bool,
+    kp: float,
+    time_to_conj_h: float = 99.0,
+) -> tuple:
+    if _HAS_MANEUVER_SVC:
+        try:
+            return _maneuver_recommend(
+                score, failure_prob, flagged, risk_level, maneuver_advised, kp, time_to_conj_h
+            )
+        except Exception:
+            pass
+    return _build_maneuver_actions(score, failure_prob, flagged, risk_level, maneuver_advised, kp, time_to_conj_h)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/inject-anomaly")
+async def inject_anomaly(request: InjectAnomalyRequest):
+    if request.scenario not in VALID_SCENARIOS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Unknown scenario '{request.scenario}'. Valid: {sorted(VALID_SCENARIOS)}")
+    set_scenario(request.scenario)
+    logger.info(f"POST /api/inject-anomaly  scenario={request.scenario}")
+    return {"scenario": request.scenario, "status": "active"}
+
 
 @router.post("/detect-anomaly")
 async def detect_anomaly(request: AnomalyRequest):
@@ -404,7 +449,7 @@ async def maneuver_recommendation(request: ManeuverRequest):
         )
         time_to_conj = c.time_to_conjunction_hours
 
-    posture, actions, summary = _build_maneuver_actions(
+    posture, actions, summary = _run_maneuver(
         score, failure_prob, flagged, risk_level, maneuver_advised, request.kp_index, time_to_conj
     )
 
@@ -443,31 +488,37 @@ async def copilot_chat(request: CopilotRequest):
         )
         time_to_conj = c.time_to_conjunction_hours
 
-    posture, actions, summary = _build_maneuver_actions(
+    posture, actions, summary = _run_maneuver(
         score, failure_prob, flagged, risk_level, maneuver_advised, request.kp_index, time_to_conj
     )
 
-    context = {
-        "health_score": score,
-        "status": status,
-        "failure_probability": failure_prob,
-        "is_anomaly": is_anomaly,
-        "flagged_features": flagged,
-        "collision_risk_level": risk_level,
-        "maneuver_advised": maneuver_advised,
-        "kp_index": request.kp_index,
-        "posture": posture,
-        "recommended_actions": actions,
-        "top_driver": top_driver,
-    }
+    conj_id = request.conjunction.object_id if request.conjunction else None
+    context = _build_context(
+        telemetry=readings,
+        health_score=score,
+        status=status,
+        is_anomaly=is_anomaly,
+        flagged_features=flagged,
+        anomaly_score=anomaly_score,
+        failure_probability=failure_prob,
+        top_driver=top_driver,
+        collision_risk_level=risk_level,
+        risk_score=risk_score,
+        maneuver_advised=maneuver_advised,
+        time_to_conjunction_hours=time_to_conj,
+        conjunction_object_id=conj_id,
+        kp_index=request.kp_index,
+        posture=posture,
+        actions=actions,
+        satellite_id=request.telemetry.satellite_id,
+    )
 
-    # Phase 4: try LLM here, fall through to deterministic fallback on any error
-    reply = _deterministic_copilot_reply(request.message, context)
+    reply, source = _copilot_svc.chat(request.message, context)
 
-    logger.info(f"POST /api/copilot  score={score} posture={posture} source=fallback")
+    logger.info(f"POST /api/copilot  score={score} posture={posture} source={source}")
     return {
         "reply": reply,
-        "source": "fallback",  # Phase 4: becomes "llm" when API key present
+        "source": source,
         "signals": {
             "health_score": score,
             "failure_probability": failure_prob,
@@ -497,60 +548,38 @@ async def incident_report(request: IncidentReportRequest):
         )
         time_to_conj = c.time_to_conjunction_hours
 
-    posture, actions, summary = _build_maneuver_actions(
+    posture, actions, summary = _run_maneuver(
         score, failure_prob, flagged, risk_level, maneuver_advised, request.kp_index, time_to_conj
     )
 
-    flagged_str = "\n".join(
-        f"  • {f['feature']}: {f['value']} (expected {f['expected_range'][0]}–{f['expected_range'][1]}) [{f['direction'].upper()}]"
-        for f in flagged
-    ) or "  None detected."
+    conj_id = request.conjunction.object_id if request.conjunction else None
+    context = _build_context(
+        telemetry=readings,
+        health_score=score,
+        status=status,
+        is_anomaly=is_anomaly,
+        flagged_features=flagged,
+        anomaly_score=anomaly_score,
+        failure_probability=failure_prob,
+        top_driver=top_driver,
+        collision_risk_level=risk_level,
+        risk_score=risk_score,
+        maneuver_advised=maneuver_advised,
+        time_to_conjunction_hours=time_to_conj,
+        conjunction_object_id=conj_id,
+        kp_index=request.kp_index,
+        posture=posture,
+        actions=actions,
+        satellite_id=request.telemetry.satellite_id,
+    )
 
-    actions_str = "\n".join(
-        f"  {a['priority']}. {a['action']}"
-        for a in actions
-    ) or "  No actions required."
+    report, source = _copilot_svc.generate_report(context)
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    review_interval = "15 minutes" if score < 50 else ("1 hour" if score < 80 else "24 hours")
-
-    report = f"""HACK ORBIT — SATELLITE INCIDENT REPORT
-Generated: {now}
-Satellite: {request.telemetry.satellite_id}
-
-═══════════════════════════════════════════════════════════
-
-SUMMARY
-Health Score : {score}/100  [{status.upper()}]
-Anomaly      : {"DETECTED" if is_anomaly else "NONE"}  (score: {anomaly_score:.2f})
-Failure Risk : {failure_prob}%  (primary driver: {top_driver})
-Posture      : {posture.upper()}
-
-DETECTED ANOMALIES
-{flagged_str}
-
-RISK ASSESSMENT
-Primary Driver   : {top_driver}
-Anomaly Score    : {anomaly_score:.2f} / 1.00
-Collision Risk   : {risk_level.upper()}  (score: {risk_score})
-Maneuver Advised : {"YES" if maneuver_advised else "NO"}
-Kp Index         : {request.kp_index}
-
-RECOMMENDED ACTIONS
-{actions_str}
-
-NEXT REVIEW
-{review_interval}
-
-═══════════════════════════════════════════════════════════
-Hack Orbit — Predict. Protect. Decide.
-"""
-
-    logger.info(f"POST /api/incident-report  score={score} posture={posture}")
+    logger.info(f"POST /api/incident-report  score={score} posture={posture} source={source}")
     return {
         "report": report,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "source": "deterministic",  # Phase 4: becomes "llm" when key present
+        "source": source,
         "summary": {
             "health_score": score,
             "failure_probability": failure_prob,
@@ -558,55 +587,3 @@ Hack Orbit — Predict. Protect. Decide.
         },
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Deterministic copilot fallback — must work with no API key / no internet
-# Returns complete, sensible advice drawn from the maneuver engine (spec §6.3)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _deterministic_copilot_reply(message: str, ctx: dict) -> str:
-    score = ctx["health_score"]
-    prob = ctx["failure_probability"]
-    is_anomaly = ctx["is_anomaly"]
-    kp = ctx["kp_index"]
-    posture = ctx["posture"]
-    actions = ctx["recommended_actions"]
-    flagged = ctx["flagged_features"]
-    risk_level = ctx["collision_risk_level"]
-    maneuver_advised = ctx["maneuver_advised"]
-
-    lines = []
-
-    # Status summary
-    if posture == "nominal":
-        lines.append(f"All systems nominal. Health score {score}/100. No immediate action required.")
-    elif posture == "elevated":
-        lines.append(f"Elevated concern — health score {score}/100, failure risk {prob}%.")
-    else:
-        lines.append(f"Critical situation — health score {score}/100, failure risk {prob}%.")
-
-    # Anomaly context
-    if flagged:
-        names = ", ".join(f["feature"] for f in flagged)
-        lines.append(f"Anomalies flagged: {names}.")
-
-    # Storm context
-    if kp >= 7:
-        lines.append(f"G3 geomagnetic storm active (Kp {kp}) — do NOT maneuver until storm passes.")
-    elif kp >= 5:
-        lines.append(f"Geomagnetic activity elevated (Kp {kp}) — caution advised for maneuvers.")
-
-    # Collision context
-    if maneuver_advised:
-        if kp >= 5:
-            lines.append("Debris conjunction active but avoidance burn is DELAYED due to storm — wait for Kp < 5.")
-        else:
-            lines.append(f"Debris conjunction detected ({risk_level} risk) — avoidance burn recommended.")
-
-    # Top actions
-    if actions:
-        lines.append("Priority actions:")
-        for a in actions[:3]:  # Max 3 for conciseness
-            lines.append(f"  {a['priority']}. {a['action']}")
-
-    return " ".join(lines) if not any("\n" in l for l in lines) else "\n".join(lines)

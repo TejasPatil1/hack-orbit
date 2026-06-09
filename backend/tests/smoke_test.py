@@ -18,8 +18,9 @@ from app.api.ai import (
     _stub_failure_prob,
     _stub_collision_risk,
     _build_maneuver_actions,
-    _deterministic_copilot_reply,
 )
+from app.services.ai_copilot import copilot as _copilot_svc
+from app.services.ai_copilot.context_builder import build_context as _build_context
 
 PASS = "[PASS]"
 FAIL = "[FAIL]"
@@ -56,20 +57,26 @@ def run_scenario(scenario: str) -> dict:
         score, failure_prob, flagged, risk_level, maneuver_advised, kp, time_to_conj
     )
 
-    ctx = {
-        "health_score": score,
-        "status": status,
-        "failure_probability": failure_prob,
-        "is_anomaly": is_anomaly,
-        "flagged_features": flagged,
-        "collision_risk_level": risk_level,
-        "maneuver_advised": maneuver_advised,
-        "kp_index": kp,
-        "posture": posture,
-        "recommended_actions": actions,
-        "top_driver": top_driver,
-    }
-    copilot_reply = _deterministic_copilot_reply("What should I do right now?", ctx)
+    conj_obj_id = conj_data["object_id"] if conj_data else None
+    context = _build_context(
+        telemetry=readings,
+        health_score=score,
+        status=status,
+        is_anomaly=is_anomaly,
+        flagged_features=flagged,
+        anomaly_score=anomaly_score,
+        failure_probability=failure_prob,
+        top_driver=top_driver,
+        collision_risk_level=risk_level,
+        risk_score=risk_score,
+        maneuver_advised=maneuver_advised,
+        time_to_conjunction_hours=time_to_conj,
+        conjunction_object_id=conj_obj_id,
+        kp_index=kp,
+        posture=posture,
+        actions=actions,
+    )
+    copilot_reply, _ = _copilot_svc.chat("What should I do right now?", context)
 
     return {
         "score": score, "status": status,

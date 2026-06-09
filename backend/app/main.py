@@ -5,6 +5,13 @@ Run from backend/: uvicorn app.main:app --reload
 Person 2 adds their routers here. Person 3 only owns app.api.ai.
 """
 import logging
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from repo root (one level above backend/)
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
