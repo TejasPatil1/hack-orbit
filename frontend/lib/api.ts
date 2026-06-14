@@ -16,7 +16,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-// ── Response types ────────────────────────────────────────────────────────────
+// Response types 
 
 export interface HealthScore {
   score: number;
@@ -121,6 +121,18 @@ export interface IncidentReportResult {
   };
 }
 
+export interface MissionBriefData {
+  mission_status: "NOMINAL" | "DEGRADED" | "CRITICAL";
+  summary: string;
+  key_issues: string[];
+  recommended_action: string;
+  risk_level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+  confidence: number;
+  health_score: number;
+  failure_probability: number;
+  scenario: string;
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function buildTelemetryPayload(readings: Record<string, number>, satelliteId = "SAT-001") {
@@ -140,11 +152,12 @@ function buildConjunctionPayload(conj: ConjunctionInfo | null) {
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 export const api = {
-  healthScore:   () => get<HealthScore>("/api/health-score"),
-  telemetry:     () => get<Telemetry>("/api/telemetry"),
-  weather:       () => get<WeatherData>("/api/weather"),
-  debris:        () => get<DebrisData>("/api/debris"),
-  forecast:      () => get<ForecastData>("/api/forecast"),
+  healthScore:  () => get<HealthScore>("/api/health-score"),
+  telemetry:    () => get<Telemetry>("/api/telemetry"),
+  weather:      () => get<WeatherData>("/api/weather"),
+  debris:       () => get<DebrisData>("/api/debris"),
+  forecast:     () => get<ForecastData>("/api/forecast"),
+  missionBrief: () => get<MissionBriefData>("/api/mission-brief"),
 
   injectScenario: (scenario: string) =>
     post<{ scenario: string; status: string }>("/api/inject-anomaly", { scenario }),

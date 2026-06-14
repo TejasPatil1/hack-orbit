@@ -1,17 +1,29 @@
 "use client";
 
 const SCENARIOS = [
-  { id: "healthy",     label: "Healthy",     color: "green",  score: "92" },
-  { id: "anomaly",     label: "Anomaly",     color: "yellow", score: "62" },
-  { id: "debris",      label: "Debris",      color: "yellow", score: "62" },
-  { id: "solar_storm", label: "Solar Storm", color: "red",    score: "54" },
-  { id: "resolution",  label: "Resolution",  color: "green",  score: "99" },
+  { id: "healthy",     label: "Healthy",      icon: "●", color: "green",  score: "92" },
+  { id: "anomaly",     label: "Anomaly",      icon: "▲", color: "yellow", score: "62" },
+  { id: "debris",      label: "Debris",       icon: "◆", color: "yellow", score: "62" },
+  { id: "solar_storm", label: "Solar Storm",  icon: "☀", color: "red",    score: "54" },
+  { id: "resolution",  label: "Resolution",   icon: "✓", color: "green",  score: "99" },
 ] as const;
 
 const COLOR_MAP = {
-  green:  "border-green-500/60 hover:bg-green-900/30 text-green-400",
-  yellow: "border-yellow-500/60 hover:bg-yellow-900/30 text-yellow-400",
-  red:    "border-red-500/60 hover:bg-red-900/30 text-red-400",
+  green:  {
+    base:   "border-green-600/40 text-green-500",
+    active: "border-green-500 bg-green-900/30 text-green-300 ring-1 ring-green-500/50",
+    hover:  "hover:bg-green-900/20 hover:border-green-500/60",
+  },
+  yellow: {
+    base:   "border-yellow-600/40 text-yellow-500",
+    active: "border-yellow-500 bg-yellow-900/30 text-yellow-300 ring-1 ring-yellow-500/50",
+    hover:  "hover:bg-yellow-900/20 hover:border-yellow-500/60",
+  },
+  red: {
+    base:   "border-red-600/40 text-red-500",
+    active: "border-red-500 bg-red-900/30 text-red-300 ring-1 ring-red-500/50",
+    hover:  "hover:bg-red-900/20 hover:border-red-500/60",
+  },
 };
 
 interface Props {
@@ -22,23 +34,34 @@ interface Props {
 
 export default function ScenarioSwitcher({ active, onSelect, loading }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-slate-500 uppercase tracking-widest mr-1">Demo Scenario</span>
-      {SCENARIOS.map((s) => (
-        <button
-          key={s.id}
-          disabled={loading}
-          onClick={() => onSelect(s.id)}
-          className={`
-            px-3 py-1.5 rounded-md border text-xs font-semibold transition-all
-            ${COLOR_MAP[s.color]}
-            ${active === s.id ? "opacity-100 ring-1 ring-current bg-current/10" : "opacity-50"}
-            disabled:cursor-not-allowed
-          `}
-        >
-          {s.label} <span className="opacity-60 ml-1">{s.score}</span>
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-slate-600 uppercase tracking-widest mr-1 hidden sm:block">
+        Scenario
+      </span>
+      {SCENARIOS.map((s) => {
+        const isActive = active === s.id;
+        const c = COLOR_MAP[s.color];
+        return (
+          <button
+            key={s.id}
+            disabled={loading}
+            onClick={() => onSelect(s.id)}
+            className={`
+              px-2.5 py-1 rounded-md border text-xs font-semibold
+              transition-all duration-150 select-none
+              ${isActive ? c.active : `${c.base} opacity-50 ${c.hover}`}
+              disabled:cursor-not-allowed disabled:opacity-30
+            `}
+          >
+            <span className="mr-1 opacity-70">{s.icon}</span>
+            {s.label}
+            <span className="ml-1.5 opacity-50 font-mono">{s.score}</span>
+          </button>
+        );
+      })}
+      {loading && (
+        <span className="text-xs text-slate-600 animate-pulse ml-1">switching…</span>
+      )}
     </div>
   );
 }

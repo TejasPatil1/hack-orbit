@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type {
   HealthScore, Telemetry, WeatherData,
   DebrisData, ForecastData, AnomalyResult, FailureResult,
+  MissionBriefData,
 } from "@/lib/api";
 
 import AlertBanner      from "@/components/AlertBanner";
@@ -15,6 +16,8 @@ import WeatherPanel     from "@/components/WeatherPanel";
 import DebrisPanel      from "@/components/DebrisPanel";
 import ForecastChart    from "@/components/ForecastChart";
 import CopilotChat      from "@/components/CopilotChat";
+import MissionBrief     from "@/components/MissionBrief";
+import SystemStatus     from "@/components/SystemStatus";
 
 const POLL_MS = 4000;
 
@@ -24,6 +27,7 @@ export default function Dashboard() {
   const [weather,   setWeather]   = useState<WeatherData | null>(null);
   const [debris,    setDebris]    = useState<DebrisData | null>(null);
   const [forecast,  setForecast]  = useState<ForecastData | null>(null);
+  const [brief,     setBrief]     = useState<MissionBriefData | null>(null);
   const [anomaly,   setAnomaly]   = useState<AnomalyResult | null>(null);
   const [failure,   setFailure]   = useState<FailureResult | null>(null);
 
@@ -34,14 +38,20 @@ export default function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, t, w, d, f] = await Promise.all([
-        api.healthScore(), api.telemetry(), api.weather(), api.debris(), api.forecast(),
+      const [h, t, w, d, f, b] = await Promise.all([
+        api.healthScore(),
+        api.telemetry(),
+        api.weather(),
+        api.debris(),
+        api.forecast(),
+        api.missionBrief(),
       ]);
       setHealth(h);
       setTelemetry(t);
       setWeather(w);
       setDebris(d);
       setForecast(f);
+      setBrief(b);
       setScenario(h.scenario);
       setLastSync(new Date());
       setError(null);
@@ -82,71 +92,76 @@ export default function Dashboard() {
   const stormAlert = weather?.alert ?? null;
 
   return (
-    <div className="min-h-screen bg-space-bg p-4 md:p-6">
-      {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-lg font-bold text-slate-100 tracking-tight">
-            🛰 Hack Orbit
-          </h1>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <p className="text-xs text-slate-500">
-              AI Mission Intelligence Copilot · SAT-001 · LEO 550 km
+    <div className="min-h-screen bg-space-bg p-4 md:p-5">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="mb-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div>
+            <h1 className="text-base font-bold text-slate-100 tracking-tight">
+              🛰 Hack Orbit
+              <span className="ml-2 text-xs font-normal text-slate-600 tracking-normal">
+                AI Mission Intelligence Copilot
+              </span>
+            </h1>
+            <p className="text-xs text-slate-600 mt-0.5">
+              SAT-001 (HO-SAT-001) · LEO 550 km · 53° incl.
             </p>
-            {lastSync && (
-              <span className="text-xs text-slate-700">
-                · synced {lastSync.toLocaleTimeString()}
-              </span>
-            )}
-            {!error && lastSync && (
-              <span className="flex items-center gap-1 text-xs text-green-500">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                Live
-              </span>
-            )}
           </div>
+          <ScenarioSwitcher active={scenario} onSelect={switchScenario} loading={switching} />
         </div>
-        <ScenarioSwitcher active={scenario} onSelect={switchScenario} loading={switching} />
+        <SystemStatus backendOnline={!error} lastSync={lastSync} />
       </header>
 
-      {/* Error state */}
+      {/* ── Error banner ───────────────────────────────────────────────────── */}
       {error && (
-        <div className="mb-4 rounded-lg border border-orange-500/40 bg-orange-950/30 px-4 py-3 text-sm text-orange-300">
+        <div className="mb-3 rounded-lg border border-orange-500/40 bg-orange-950/30 px-4 py-3 text-sm text-orange-300">
           ⚠ {error}
         </div>
       )}
 
-      {/* Alert banners */}
+      {/* ── Alert banners ──────────────────────────────────────────────────── */}
       {(isAnomaly || stormAlert) && (
-        <div className="mb-4 space-y-2">
-          {stormAlert && <AlertBanner alert={stormAlert} isAnomaly={false} primaryDriver={null} />}
-          {isAnomaly  && <AlertBanner alert={null} isAnomaly={true} primaryDriver={health?.primary_driver ?? null} />}
+        <div className="mb-3 space-y-2">
+          {stormAlert && (
+            <AlertBanner alert={stormAlert} isAnomaly={false} primaryDriver={null} />
+          )}
+          {isAnomaly && (
+            <AlertBanner alert={null} isAnomaly={true} primaryDriver={health?.primary_driver ?? null} />
+          )}
         </div>
       )}
 
-      {/* Top row: Health | Telemetry | Weather */}
+      {/* ── Row 1: Health Score (1/3) + Mission Brief (2/3) ────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <HealthScoreCard
           data={health}
           failurePct={failure?.failure_probability ?? null}
           isAnomaly={isAnomaly}
         />
-        <TelemetryPanel data={telemetry} />
-        <WeatherPanel   data={weather}   />
+        <div className="md:col-span-2">
+          <MissionBrief data={brief} />
+        </div>
       </div>
 
-      {/* Mid row: Debris | Forecast */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <DebrisPanel   data={debris}   />
+      {/* ── Row 2: Telemetry | Weather | Debris ────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <TelemetryPanel data={telemetry} />
+        <WeatherPanel   data={weather}   />
+        <DebrisPanel    data={debris}    />
+      </div>
+
+      {/* ── Row 3: 7-Day Forecast ──────────────────────────────────────────── */}
+      <div className="mb-4">
         <ForecastChart data={forecast} />
       </div>
 
-      {/* Copilot full width */}
+      {/* ── Row 4: AI Copilot ──────────────────────────────────────────────── */}
       <CopilotChat telemetry={telemetry} />
 
-      {/* Footer */}
-      <footer className="mt-6 text-center text-xs text-slate-700">
-        Hack Orbit · Predict. Protect. Decide. · {POLL_MS / 1000}s polling interval
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      <footer className="mt-5 text-center text-xs text-slate-700">
+        Hack Orbit · Predict. Protect. Decide. · polling {POLL_MS / 1000}s · telemetry 1.5s
       </footer>
     </div>
   );

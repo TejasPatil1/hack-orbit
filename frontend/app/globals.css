@@ -2,18 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+
 body {
   background-color: #070b14;
   color: #e2e8f0;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: #0d1224; }
-::-webkit-scrollbar-thumb { background: #1a2540; border-radius: 4px; }
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
 
-/* Glow effects */
-.glow-green  { box-shadow: 0 0 12px rgba(0, 255, 136, 0.25); }
-.glow-yellow { box-shadow: 0 0 12px rgba(255, 204, 0, 0.25); }
-.glow-red    { box-shadow: 0 0 12px rgba(255, 68, 68, 0.35); }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0d1224; }
+::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3d60; }
+
+/* ── Glow effects ──────────────────────────────────────────────────────────── */
+
+.glow-green  { box-shadow: 0 0 16px rgba(0, 255, 136, 0.18); }
+.glow-yellow { box-shadow: 0 0 16px rgba(255, 204, 0,   0.18); }
+.glow-red    { box-shadow: 0 0 20px rgba(255, 68,  68,  0.28); }
+
+/* ── Card entrance animation ───────────────────────────────────────────────── */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Apply to top-level grid children on first paint */
+.grid > * {
+  animation: fadeInUp 0.25s ease both;
+}
+
+/* ── Alert pulse ───────────────────────────────────────────────────────────── */
+
+@keyframes alertPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
+.alert-pulse {
+  animation: alertPulse 2s ease-in-out infinite;
+}
+
+/* ── Tabular numbers ───────────────────────────────────────────────────────── */
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Smooth value transitions ──────────────────────────────────────────────── */
+
+.live-value {
+  display: inline-block;
+  transition: color 0.3s ease;
+}
