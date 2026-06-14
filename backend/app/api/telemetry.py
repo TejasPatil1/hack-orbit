@@ -1,8 +1,6 @@
 """
 GET /api/telemetry   — current satellite telemetry snapshot
 GET /api/satellite   — static satellite metadata
-
-Person 2 will replace stub data with live CelesTrak / real sensor feeds.
 """
 import logging
 from datetime import datetime, timezone
@@ -24,7 +22,7 @@ async def get_telemetry():
 
     return {
         "satellite_id": "SAT-001",
-        "satellite_name": "Hack Orbit Demo Sat",
+        "satellite_name": "HO-SAT-001",
         "scenario": scenario,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "readings": readings,
@@ -37,7 +35,7 @@ async def get_telemetry():
 async def get_satellite():
     return {
         "satellite_id": "SAT-001",
-        "name": "Hack Orbit Demo Sat",
+        "name": "HO-SAT-001",
         "orbit_type": "LEO",
         "altitude_km": 550,
         "inclination_deg": 53.0,

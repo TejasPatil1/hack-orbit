@@ -19,17 +19,18 @@ import CopilotChat      from "@/components/CopilotChat";
 const POLL_MS = 4000;
 
 export default function Dashboard() {
-  const [health,    setHealth]   = useState<HealthScore | null>(null);
-  const [telemetry, setTelemetry]= useState<Telemetry | null>(null);
-  const [weather,   setWeather]  = useState<WeatherData | null>(null);
-  const [debris,    setDebris]   = useState<DebrisData | null>(null);
-  const [forecast,  setForecast] = useState<ForecastData | null>(null);
-  const [anomaly,   setAnomaly]  = useState<AnomalyResult | null>(null);
-  const [failure,   setFailure]  = useState<FailureResult | null>(null);
+  const [health,    setHealth]    = useState<HealthScore | null>(null);
+  const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
+  const [weather,   setWeather]   = useState<WeatherData | null>(null);
+  const [debris,    setDebris]    = useState<DebrisData | null>(null);
+  const [forecast,  setForecast]  = useState<ForecastData | null>(null);
+  const [anomaly,   setAnomaly]   = useState<AnomalyResult | null>(null);
+  const [failure,   setFailure]   = useState<FailureResult | null>(null);
 
-  const [scenario,  setScenario] = useState("healthy");
-  const [switching, setSwitching]= useState(false);
-  const [error,     setError]    = useState<string | null>(null);
+  const [scenario,  setScenario]  = useState("healthy");
+  const [switching, setSwitching] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+  const [lastSync,  setLastSync]  = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -42,6 +43,7 @@ export default function Dashboard() {
       setDebris(d);
       setForecast(f);
       setScenario(h.scenario);
+      setLastSync(new Date());
       setError(null);
 
       if (t.readings && Object.keys(t.readings).length > 0) {
@@ -76,7 +78,7 @@ export default function Dashboard() {
     }
   }
 
-  const isAnomaly = anomaly?.is_anomaly ?? null;
+  const isAnomaly  = anomaly?.is_anomaly ?? null;
   const stormAlert = weather?.alert ?? null;
 
   return (
@@ -87,7 +89,22 @@ export default function Dashboard() {
           <h1 className="text-lg font-bold text-slate-100 tracking-tight">
             🛰 Hack Orbit
           </h1>
-          <p className="text-xs text-slate-500">AI Mission Intelligence Copilot · SAT-001 · LEO 550 km</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <p className="text-xs text-slate-500">
+              AI Mission Intelligence Copilot · SAT-001 · LEO 550 km
+            </p>
+            {lastSync && (
+              <span className="text-xs text-slate-700">
+                · synced {lastSync.toLocaleTimeString()}
+              </span>
+            )}
+            {!error && lastSync && (
+              <span className="flex items-center gap-1 text-xs text-green-500">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
         </div>
         <ScenarioSwitcher active={scenario} onSelect={switchScenario} loading={switching} />
       </header>
@@ -103,7 +120,7 @@ export default function Dashboard() {
       {(isAnomaly || stormAlert) && (
         <div className="mb-4 space-y-2">
           {stormAlert && <AlertBanner alert={stormAlert} isAnomaly={false} primaryDriver={null} />}
-          {isAnomaly  && <AlertBanner alert={null}       isAnomaly={true}  primaryDriver={health?.primary_driver ?? null} />}
+          {isAnomaly  && <AlertBanner alert={null} isAnomaly={true} primaryDriver={health?.primary_driver ?? null} />}
         </div>
       )}
 
@@ -111,7 +128,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <HealthScoreCard
           data={health}
-          failurePct={failure?.failure_probability_pct ?? null}
+          failurePct={failure?.failure_probability ?? null}
           isAnomaly={isAnomaly}
         />
         <TelemetryPanel data={telemetry} />
@@ -120,16 +137,16 @@ export default function Dashboard() {
 
       {/* Mid row: Debris | Forecast */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <DebrisPanel  data={debris}   />
+        <DebrisPanel   data={debris}   />
         <ForecastChart data={forecast} />
       </div>
 
       {/* Copilot full width */}
-      <CopilotChat />
+      <CopilotChat telemetry={telemetry} />
 
       {/* Footer */}
       <footer className="mt-6 text-center text-xs text-slate-700">
-        Hack Orbit · Predict. Protect. Decide. · Polling every {POLL_MS / 1000}s
+        Hack Orbit · Predict. Protect. Decide. · {POLL_MS / 1000}s polling interval
       </footer>
     </div>
   );

@@ -2,14 +2,20 @@
 
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
+import type { Telemetry } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
   text: string;
   source?: "llm" | "fallback";
+  isReport?: boolean;
 }
 
-export default function CopilotChat() {
+interface Props {
+  telemetry: Telemetry | null;
+}
+
+export default function CopilotChat({ telemetry }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -19,6 +25,7 @@ export default function CopilotChat() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,7 +39,10 @@ export default function CopilotChat() {
     setMessages((m) => [...m, { role: "user", text }]);
     setLoading(true);
     try {
-      const res = await api.copilot(text);
+      const readings = telemetry?.readings ?? {};
+      const kpIndex = telemetry?.kp_index ?? 2.0;
+      const conjunction = telemetry?.conjunction ?? null;
+      const res = await api.copilot(text, readings, kpIndex, conjunction);
       setMessages((m) => [...m, { role: "assistant", text: res.reply, source: res.source }]);
     } catch {
       setMessages((m) => [...m, {
@@ -42,6 +52,32 @@ export default function CopilotChat() {
       }]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateReport() {
+    if (generatingReport || !telemetry) return;
+    setGeneratingReport(true);
+    try {
+      const res = await api.incidentReport(
+        telemetry.readings,
+        telemetry.kp_index,
+        telemetry.conjunction,
+      );
+      setMessages((m) => [...m, {
+        role: "assistant",
+        text: res.report,
+        source: res.source,
+        isReport: true,
+      }]);
+    } catch {
+      setMessages((m) => [...m, {
+        role: "assistant",
+        text: "Failed to generate incident report. Check backend connection.",
+        source: "fallback",
+      }]);
+    } finally {
+      setGeneratingReport(false);
     }
   }
 
@@ -55,10 +91,19 @@ export default function CopilotChat() {
     <div className="rounded-xl border border-space-border bg-space-card p-5 flex flex-col" style={{ minHeight: "360px" }}>
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs uppercase tracking-widest text-slate-500">AI Copilot</p>
-        <span className="text-xs text-green-400 flex items-center gap-1">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          ORBIT Online
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={generateReport}
+            disabled={generatingReport || !telemetry}
+            className="text-xs px-3 py-1 rounded-md border border-blue-700/50 text-blue-400 hover:bg-blue-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {generatingReport ? "Generating…" : "↓ Incident Report"}
+          </button>
+          <span className="text-xs text-green-400 flex items-center gap-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            ORBIT Online
+          </span>
+        </div>
       </div>
 
       {/* Messages */}
@@ -66,24 +111,33 @@ export default function CopilotChat() {
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`
-              max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed
-              ${msg.role === "user"
-                ? "bg-blue-900/40 border border-blue-700/50 text-blue-100"
-                : "bg-space-bg border border-space-border text-slate-300"}
+              rounded-xl px-4 py-2.5 text-sm leading-relaxed
+              ${msg.isReport
+                ? "w-full bg-space-bg border border-blue-800/50 text-slate-300"
+                : msg.role === "user"
+                  ? "max-w-[85%] bg-blue-900/40 border border-blue-700/50 text-blue-100"
+                  : "max-w-[85%] bg-space-bg border border-space-border text-slate-300"}
             `}>
               {msg.role === "assistant" && (
                 <span className="text-xs text-slate-600 block mb-1">
-                  ORBIT {msg.source === "llm" ? "· AI" : "· local"}
+                  {msg.isReport
+                    ? "ORBIT · incident report"
+                    : `ORBIT ${msg.source === "llm" ? "· AI" : "· local"}`}
                 </span>
               )}
-              <span className="whitespace-pre-wrap">{msg.text}</span>
+              {msg.isReport
+                ? <pre className="whitespace-pre-wrap font-mono text-xs text-slate-400 leading-relaxed">{msg.text}</pre>
+                : <span className="whitespace-pre-wrap">{msg.text}</span>
+              }
             </div>
           </div>
         ))}
-        {loading && (
+        {(loading || generatingReport) && (
           <div className="flex justify-start">
             <div className="bg-space-bg border border-space-border rounded-xl px-4 py-2.5">
-              <span className="text-slate-600 text-sm animate-pulse">ORBIT is thinking…</span>
+              <span className="text-slate-600 text-sm animate-pulse">
+                {generatingReport ? "Generating incident report…" : "ORBIT is thinking…"}
+              </span>
             </div>
           </div>
         )}
@@ -96,7 +150,7 @@ export default function CopilotChat() {
           <button
             key={q}
             disabled={loading}
-            onClick={() => { setInput(q); }}
+            onClick={() => setInput(q)}
             className="text-xs px-2.5 py-1 rounded-md border border-space-muted text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-colors disabled:opacity-40"
           >
             {q}

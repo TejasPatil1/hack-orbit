@@ -8,6 +8,13 @@ const STATUS_COLOR = {
   critical: { ring: "#ff4444", text: "text-red-400",    bg: "glow-red" },
 };
 
+function riskTier(pct: number): { label: string; cls: string } {
+  if (pct >= 70) return { label: "CRITICAL",  cls: "text-red-400" };
+  if (pct >= 40) return { label: "HIGH",      cls: "text-orange-400" };
+  if (pct >= 20) return { label: "ELEVATED",  cls: "text-yellow-400" };
+  return           { label: "LOW",       cls: "text-green-400" };
+}
+
 interface Props {
   data: HealthScore | null;
   failurePct: number | null;
@@ -19,7 +26,7 @@ export default function HealthScoreCard({ data, failurePct, isAnomaly }: Props) 
   const status = (data?.status ?? "nominal") as keyof typeof STATUS_COLOR;
   const colors = STATUS_COLOR[status];
 
-  const pct    = failurePct != null ? `${failurePct}%` : "--";
+  const tier = failurePct != null ? riskTier(failurePct) : null;
 
   const topPenalties = data?.breakdown
     ? Object.entries(data.breakdown)
@@ -32,7 +39,7 @@ export default function HealthScoreCard({ data, failurePct, isAnomaly }: Props) 
     <div className={`rounded-xl border border-space-border bg-space-card p-5 ${colors.bg}`}>
       <p className="text-xs uppercase tracking-widest text-slate-500 mb-3">Health Score</p>
 
-      {/* Big score ring */}
+      {/* Score ring */}
       <div className="flex justify-center my-3">
         <svg width="120" height="120" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r="50" fill="none" stroke="#1a2540" strokeWidth="10" />
@@ -57,18 +64,32 @@ export default function HealthScoreCard({ data, failurePct, isAnomaly }: Props) 
         {status}
       </p>
 
+      {data?.primary_driver && (
+        <p className="text-center text-xs text-slate-500 mt-1">
+          Driver: <span className="text-orange-400">{data.primary_driver.replace(/_/g, " ")}</span>
+        </p>
+      )}
+
       <div className="mt-4 grid grid-cols-2 gap-2 text-center">
         <div className="bg-space-bg rounded-lg p-2">
           <p className="text-xs text-slate-500">Failure Risk</p>
-          <p className={`font-bold text-lg ${failurePct != null && failurePct > 50 ? "text-red-400" : failurePct != null && failurePct > 25 ? "text-yellow-400" : "text-green-400"}`}>
-            {pct}
+          <p className={`font-bold text-lg ${tier?.cls ?? "text-slate-500"}`}>
+            {failurePct != null ? `${failurePct}%` : "--"}
           </p>
+          {tier && (
+            <p className={`text-xs font-semibold ${tier.cls}`}>{tier.label}</p>
+          )}
         </div>
         <div className="bg-space-bg rounded-lg p-2">
           <p className="text-xs text-slate-500">Anomaly</p>
           <p className={`font-bold text-lg ${isAnomaly ? "text-red-400" : "text-green-400"}`}>
             {isAnomaly == null ? "--" : isAnomaly ? "YES" : "NO"}
           </p>
+          {isAnomaly != null && (
+            <p className={`text-xs font-semibold ${isAnomaly ? "text-red-400" : "text-green-400"}`}>
+              {isAnomaly ? "DETECTED" : "CLEAR"}
+            </p>
+          )}
         </div>
       </div>
 

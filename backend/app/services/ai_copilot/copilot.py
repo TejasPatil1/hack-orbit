@@ -232,11 +232,13 @@ def _fallback_report(context: dict) -> str:
         for a in sorted(actions, key=lambda x: x["priority"])
     ) or "  No actions required."
 
-    return f"""HACK ORBIT -- SATELLITE INCIDENT REPORT
-Generated : {now}
-Satellite : {satellite_id}
+    return f"""═══════════════════════════════════════════════════
+  ORBIT — SATELLITE INCIDENT REPORT
+═══════════════════════════════════════════════════
+  Generated  : {now}
+  Satellite  : {satellite_id}
 
-SUMMARY
+EXECUTIVE SUMMARY
   Health Score     : {score}/100  [{status}]
   Anomaly Detected : {"YES" if is_anomaly else "NO"}  (score: {anomaly_score:.2f})
   Failure Risk     : {prob}%
@@ -250,13 +252,13 @@ RISK ASSESSMENT
   Anomaly Score    : {anomaly_score:.2f} / 1.00
   Collision Risk   : {risk_level}
   Maneuver Advised : {"YES" if maneuver_advised else "NO"}
-  Kp Index         : {kp}  {"[STORM ACTIVE]" if kp >= 5 else ""}
+  Kp Index         : {kp}  {"[STORM ACTIVE]" if kp >= 5 else "[NOMINAL]"}
 
 RECOMMENDED ACTIONS
 {action_lines}
 
-NEXT REVIEW
-  {review}
-
--- Hack Orbit | Predict. Protect. Decide. --
+NEXT REVIEW    : {review}
+═══════════════════════════════════════════════════
+  Predict. Protect. Decide. — Hack Orbit
+═══════════════════════════════════════════════════
 """

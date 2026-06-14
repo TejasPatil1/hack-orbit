@@ -26,6 +26,14 @@ export interface HealthScore {
   scenario: string;
 }
 
+export interface ConjunctionInfo {
+  object_id: string;
+  miss_distance_km: number;
+  relative_velocity_km_s: number;
+  time_to_conjunction_hours: number;
+  risk_level: string;
+}
+
 export interface Telemetry {
   satellite_id: string;
   satellite_name: string;
@@ -34,13 +42,6 @@ export interface Telemetry {
   readings: Record<string, number>;
   kp_index: number;
   conjunction: ConjunctionInfo | null;
-}
-
-export interface ConjunctionInfo {
-  object_id: string;
-  miss_distance_km: number;
-  time_to_conjunction_hours: number;
-  risk_level: string;
 }
 
 export interface WeatherData {
@@ -86,39 +87,99 @@ export interface ForecastData {
 export interface CopilotReply {
   reply: string;
   source: "llm" | "fallback";
-  scenario: string;
+}
+
+export interface FlaggedFeature {
+  feature: string;
+  value: number;
+  expected_range: [number, number];
+  direction: "high" | "low";
 }
 
 export interface AnomalyResult {
   is_anomaly: boolean;
   anomaly_score: number;
-  flagged_features: string[];
-  scenario: string;
+  flagged_features: FlaggedFeature[];
+  method: string;
 }
 
 export interface FailureResult {
-  failure_probability_pct: number;
-  risk_tier: string;
+  failure_probability: number;
   top_driver: string;
-  scenario: string;
+  health_score_used: number;
+  method: string;
+}
+
+export interface IncidentReportResult {
+  report: string;
+  generated_at: string;
+  source: "llm" | "fallback";
+  summary: {
+    health_score: number;
+    failure_probability: number;
+    posture: string;
+  };
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function buildTelemetryPayload(readings: Record<string, number>, satelliteId = "SAT-001") {
+  return { satellite_id: satelliteId, ...readings };
+}
+
+function buildConjunctionPayload(conj: ConjunctionInfo | null) {
+  if (!conj) return null;
+  return {
+    object_id: conj.object_id,
+    miss_distance_km: conj.miss_distance_km,
+    relative_velocity_km_s: conj.relative_velocity_km_s ?? 7.2,
+    time_to_conjunction_hours: conj.time_to_conjunction_hours,
+  };
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 export const api = {
-  healthScore:   ()                          => get<HealthScore>("/api/health-score"),
-  telemetry:     ()                          => get<Telemetry>("/api/telemetry"),
-  weather:       ()                          => get<WeatherData>("/api/weather"),
-  debris:        ()                          => get<DebrisData>("/api/debris"),
-  forecast:      ()                          => get<ForecastData>("/api/forecast"),
+  healthScore:   () => get<HealthScore>("/api/health-score"),
+  telemetry:     () => get<Telemetry>("/api/telemetry"),
+  weather:       () => get<WeatherData>("/api/weather"),
+  debris:        () => get<DebrisData>("/api/debris"),
+  forecast:      () => get<ForecastData>("/api/forecast"),
 
-  injectScenario: (scenario: string)         => post<{ scenario: string; status: string }>("/api/inject-anomaly", { scenario }),
-
-  copilot: (message: string)                 => post<CopilotReply>("/api/copilot", { message, satellite_id: "SAT-001" }),
+  injectScenario: (scenario: string) =>
+    post<{ scenario: string; status: string }>("/api/inject-anomaly", { scenario }),
 
   detectAnomaly: (readings: Record<string, number>) =>
-    post<AnomalyResult>("/api/detect-anomaly", { satellite_id: "SAT-001", readings }),
+    post<AnomalyResult>("/api/detect-anomaly", {
+      telemetry: buildTelemetryPayload(readings),
+    }),
 
   predictFailure: (readings: Record<string, number>) =>
-    post<FailureResult>("/api/predict-failure", { satellite_id: "SAT-001", readings }),
+    post<FailureResult>("/api/predict-failure", {
+      telemetry: buildTelemetryPayload(readings),
+    }),
+
+  copilot: (
+    message: string,
+    readings: Record<string, number>,
+    kpIndex: number,
+    conjunction: ConjunctionInfo | null,
+  ) =>
+    post<CopilotReply>("/api/copilot", {
+      message,
+      telemetry: buildTelemetryPayload(readings),
+      kp_index: kpIndex,
+      conjunction: buildConjunctionPayload(conjunction),
+    }),
+
+  incidentReport: (
+    readings: Record<string, number>,
+    kpIndex: number,
+    conjunction: ConjunctionInfo | null,
+  ) =>
+    post<IncidentReportResult>("/api/incident-report", {
+      telemetry: buildTelemetryPayload(readings),
+      kp_index: kpIndex,
+      conjunction: buildConjunctionPayload(conjunction),
+    }),
 };

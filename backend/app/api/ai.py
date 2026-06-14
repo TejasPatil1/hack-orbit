@@ -1,19 +1,13 @@
 """
-Person 3 — AI/ML endpoints.
+AI/ML endpoints — anomaly detection, failure prediction, copilot, maneuver planning.
 
-Phase 1: rule-based stubs (still used as fallback).
-Phase 2: real ML services (IsolationForest + XGBoost) loaded lazily.
-Phase 3: health score, maneuver, collision moved to dedicated services.
-Phase 4: LLM copilot replaces fallback reply.
-
-Endpoints owned by Person 3 (spec §10):
-  POST /api/detect-anomaly
-  POST /api/predict-failure
-  POST /api/collision-risk
-  POST /api/whatif
-  POST /api/maneuver
-  POST /api/copilot
-  POST /api/incident-report
+  POST /api/detect-anomaly     — IsolationForest anomaly detection (3σ fallback)
+  POST /api/predict-failure    — XGBoost failure probability
+  POST /api/collision-risk     — Conjunction risk scoring
+  POST /api/whatif             — Health score simulation with operator overrides
+  POST /api/maneuver           — Storm-gated maneuver recommendations
+  POST /api/copilot            — LLM chat with grounded context (deterministic fallback)
+  POST /api/incident-report    — Structured incident report generation
 """
 import logging
 import math
@@ -470,8 +464,8 @@ async def maneuver_recommendation(request: ManeuverRequest):
 @router.post("/copilot")
 async def copilot_chat(request: CopilotRequest):
     """
-    AI Copilot — grounded, reliable, with deterministic fallback (spec §6).
-    Phase 4 adds real LLM call. Fallback path is always active and must be demo-ready.
+    AI Copilot — grounded context block fed to LLM; deterministic fallback when offline.
+    LLM never originates facts — all numbers come from pre-computed signals.
     """
     # Build context block — LLM never originates facts (spec §6.1)
     readings = request.telemetry.to_feature_dict()
@@ -531,8 +525,7 @@ async def copilot_chat(request: CopilotRequest):
 @router.post("/incident-report")
 async def incident_report(request: IncidentReportRequest):
     """
-    Formal incident report — reuses copilot context block (spec §6.4).
-    Phase 4 generates via LLM. Structured fallback always works.
+    Formal incident report — LLM-generated with structured deterministic fallback.
     """
     readings = request.telemetry.to_feature_dict()
     score, status = _health_score(readings)
