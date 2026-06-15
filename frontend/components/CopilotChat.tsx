@@ -13,9 +13,10 @@ interface Message {
 
 interface Props {
   telemetry: Telemetry | null;
+  sidebar?: boolean;
 }
 
-export default function CopilotChat({ telemetry }: Props) {
+export default function CopilotChat({ telemetry, sidebar = false }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -88,7 +89,10 @@ export default function CopilotChat({ telemetry }: Props) {
   ];
 
   return (
-    <div className="rounded-xl border border-space-border bg-space-card p-5 flex flex-col" style={{ minHeight: "360px" }}>
+    <div
+      className={sidebar ? "flex flex-col h-full" : "rounded-xl border border-space-border bg-space-card p-5 flex flex-col"}
+      style={sidebar ? {} : { minHeight: "360px" }}
+    >
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs uppercase tracking-widest text-slate-500">AI Copilot</p>
         <div className="flex items-center gap-3">
@@ -107,7 +111,7 @@ export default function CopilotChat({ telemetry }: Props) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1" style={{ maxHeight: "280px" }}>
+      <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1" style={sidebar ? { minHeight: 0 } : { maxHeight: "280px" }}>
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`
